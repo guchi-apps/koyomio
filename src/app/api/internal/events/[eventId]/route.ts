@@ -23,7 +23,7 @@ const UPDATE_FIELDS = [
 /**
  * サーバー間（AIDE）から予定を1件更新する（docs/internal-api.md・issue #805）。
  *
- * 認証は作成と同じ `INTERNAL_EVENTS_API_KEY`。ブラウザ用の `PATCH /api/events/[eventId]` と同じ
+ * 認証は作成と同じ `DAYSPAN_INTERNAL_EVENTS_API_KEY`。ブラウザ用の `PATCH /api/events/[eventId]` と同じ
  * 更新処理（`updateEvent`・書き込み可否の判定・紐づけたタスクの日付の追随）を通す。
  * 送った項目だけを変える。対象は `calendarId` と予定のIDで必ず名指しさせる。
  */

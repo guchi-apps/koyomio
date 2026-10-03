@@ -15,7 +15,7 @@ const TIME_KEY = /^([01]\d|2[0-3]):[0-5]\d$/;
 /**
  * サーバー間（AIDE）から予定を1件作成する（docs/internal-api.md）。
  *
- * 認証は読み取り用の `INTERNAL_API_KEY` とは別の `INTERNAL_EVENTS_API_KEY`。読み取り用の
+ * 認証は読み取り用の `DAYSPAN_INTERNAL_API_KEY` とは別の `DAYSPAN_INTERNAL_EVENTS_API_KEY`。読み取り用の
  * キーが漏れても予定を書き込まれないようにするための分離（起点: guchi-apps/aide-bot#184）。
  *
  * 作成だけを持つ。編集・削除は無い（取り消せない操作をサーバー間経路へ出さないため）。

@@ -68,12 +68,14 @@ Googleログインを通すには、共有Supabaseプロジェクトの Redirect
 cd ~/apps/dayspan
 pnpm env:init        # .env.local.example を .env.local へコピー
 
-# 値は1Passwordから入れる（開発用のSupabaseプロジェクトを使う。本番の値は入れない）
+# Supabaseの開発用値だけを1Passwordから入れる（本番の値は入れない）
 u() { bash scripts/update-env-file.sh .env.local "$1" "$2"; }
 u NEXT_PUBLIC_SUPABASE_URL "$(op read 'op://apps/Supabase/personal-apps-dev/dev-project-url')"
 u NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY "$(op read 'op://apps/Supabase/personal-apps-dev/dev-publishable-key')"
 u TOKEN_ENCRYPTION_KEY "$(openssl rand -base64 32)"   # ローカル専用。本番の鍵は持ち込まない
-u INTERNAL_API_KEY "$(openssl rand -hex 32)"          # 同上
+u INTERNAL_API_KEY "$(openssl rand -hex 32)"          # 内部APIをローカル確認するときだけ使うフォールバック
+u INTERNAL_EVENTS_API_KEY "$(openssl rand -hex 32)"   # 同上。読み取り用とは別の値
+u INTERNAL_TASKS_API_KEY "$(openssl rand -hex 32)"    # 同上。予定書き込み用とも別の値
 chmod 600 .env.local
 
 bash scripts/setup-db.sh   # ローカルMariaDBにDB・ユーザーを作成（sudo mysql が通ること）
@@ -113,7 +115,7 @@ pnpm build       # 本番ビルド
 
 ## デプロイ
 
-`main` への push で `.github/workflows/deploy.yml` が VPS へ SSH デプロイし、PM2（プロセス名 `dayspan`、ポート 3113）を再起動します。シークレットは 1Password（`op://apps/dayspan/...`）から GitHub Actions 実行時に注入します。
+`main` への push で `.github/workflows/deploy.yml` が VPS へ SSH デプロイし、PM2（プロセス名 `dayspan`、ポート 3113）を再起動します。通常のシークレットはGitHub Secretsから注入し、内部API用の3鍵は実行時にissue-deckの共有トークンから取得します。
 
 初回デプロイ前に必要な手作業は [docs/setup-checklist.md](docs/setup-checklist.md) を参照してください。
 

@@ -10,20 +10,20 @@
 ## 認証
 
 ```
-Authorization: Bearer <INTERNAL_API_KEY>
+Authorization: Bearer <DAYSPAN_INTERNAL_API_KEY>
 ```
 
 | 状況 | 応答 |
 | --- | --- |
-| `INTERNAL_API_KEY` が未設定 | `503`（機能として無効。設定漏れが「認証なしの公開」に化けないようにしている） |
+| `DAYSPAN_INTERNAL_API_KEY` が未設定 | `503`（機能として無効。設定漏れが「認証なしの公開」に化けないようにしている） |
 | ヘッダなし・キー不一致 | `401` |
 | 一致 | `200` |
 
 キーの比較は `node:crypto` の `timingSafeEqual` で定数時間で行う（`src/lib/internal-auth.ts`）。トークンはクエリではなく `Authorization` ヘッダーで受ける。クエリに載せるとApacheのアクセスログにそのまま残る（iPhoneウィジェットのトークンと同じ理由。docs/spec.md §28）。
 
-**書き込み系（`POST` / `PATCH` / `DELETE /api/internal/events`）は読み取りとは別の鍵（`INTERNAL_EVENTS_API_KEY`）で守る。** 読み取り用の `INTERNAL_API_KEY` が漏れても予定を書き込まれないようにするため（起点: guchi-apps/aide-bot#184「読み取りとは別の資格情報」）。未設定・不一致のときの応答（503 / 401）は読み取り用とまったく同じ形。
+**書き込み系（`POST` / `PATCH` / `DELETE /api/internal/events`）は読み取りとは別の鍵（issue-deckの `DAYSPAN_INTERNAL_EVENTS_API_KEY`）で守る。** 読み取り用の `DAYSPAN_INTERNAL_API_KEY` が漏れても予定を書き込まれないようにするため（起点: guchi-apps/aide-bot#184「読み取りとは別の資格情報」）。未設定・不一致のときの応答（503 / 401）は読み取り用とまったく同じ形。
 
-**タスクの作成・更新・状態変更はさらに別の `INTERNAL_TASKS_API_KEY` を使う。** 共有トークン名は `DAYSPAN_INTERNAL_TASKS_API_KEY` で、取得できない環境だけ同名の環境変数へフォールバックする。読み取り鍵・予定の書き込み鍵のいずれでもタスクは変更できない。1Passwordの正は `op://apps/dayspan/internal-tasks-api-key` とし、GitHub Secret、CI・deployの転送、VPSの`.env`へ同じ名前で配る。
+**タスクの作成・更新・状態変更はさらに別のissue-deck共有トークン `DAYSPAN_INTERNAL_TASKS_API_KEY` を使う。** 読み取り鍵・予定の書き込み鍵のいずれでもタスクは変更できない。3鍵は共有トークンAPIから実行時に取得し、ローカル開発・移行中に取得できないときだけ `INTERNAL_API_KEY`・`INTERNAL_EVENTS_API_KEY`・`INTERNAL_TASKS_API_KEY` へ順にフォールバックする。GitHub Secret、CI・deployの転送、VPSの`.env`へは配らない。
 
 `/api/internal/` は `src/proxy.ts`（`src/lib/supabase/middleware.ts`）がSupabaseへ問い合わせずに素通しする。認証がキーで完結しており、呼ばれるたびにSupabase Authへ往復させる理由が無いため。matcherからは外さない（外すと詐称されたユーザーIDヘッダーが後段へ届く）。
 
@@ -49,7 +49,7 @@ Authorization: Bearer <INTERNAL_API_KEY>
 
 ## タスクの書き込み
 
-`POST /api/internal/tasks`（作成）、`PATCH /api/internal/tasks/:taskId`（許可項目の部分更新）、`POST /api/internal/tasks/:taskId/actions`（`complete` / `reopen` / `skip` / `unskip`）は `Authorization: Bearer <INTERNAL_TASKS_API_KEY>` と `X-Target-Email` を必須とする。作成と状態変更には `Idempotency-Key` も必須で、同じキー・同じ要求は保存済みの結果を返す。実行中は `409 operation_in_progress`、外部書き込み後に結果を確認できない場合は `409 result_unknown` を返すため、同じキーで再照会する。
+`POST /api/internal/tasks`（作成）、`PATCH /api/internal/tasks/:taskId`（許可項目の部分更新）、`POST /api/internal/tasks/:taskId/actions`（`complete` / `reopen` / `skip` / `unskip`）は `Authorization: Bearer <DAYSPAN_INTERNAL_TASKS_API_KEY>` と `X-Target-Email` を必須とする。作成と状態変更には `Idempotency-Key` も必須で、同じキー・同じ要求は保存済みの結果を返す。実行中は `409 operation_in_progress`、外部書き込み後に結果を確認できない場合は `409 result_unknown` を返すため、同じキーで再照会する。
 
 更新可能な項目は `title`、`due`、`planned`、`priority`、`memo`、`tags`、`recurrence`、`progress` だけである。`null` は期限・予定日・任意の選択肢・メモをクリアする。未知の項目・不正な日付・設定済みDBに対応プロパティが無い項目は `400` で拒否し、黙って成功とはしない。期限または予定日を直接変更したときは、その日付の紐づけだけを既存画面と同じ規則で外す。
 
@@ -221,7 +221,7 @@ DaySpan自身のDBを引けなかったときだけは、取れたぶんとい�
 
 予定を1件作成する（起点: guchi-apps/aide-bot#184）。秘書（AIDE）が「明日10時に歯医者を入れて」のような発話から予定を登録できるようにするための入口で、更新・削除は次節（`PATCH` / `DELETE /api/internal/events/[id]`・issue #805）が別に持つ。
 
-認証は `INTERNAL_EVENTS_API_KEY`（読み取り用の `INTERNAL_API_KEY` とは別の鍵。上記「認証」参照）。
+認証は `DAYSPAN_INTERNAL_EVENTS_API_KEY`（読み取り用の `DAYSPAN_INTERNAL_API_KEY` とは別の鍵。上記「認証」参照）。
 
 既存の `POST /api/events`（ブラウザ用）と同じ作成処理（`src/services/google-calendar/events.ts` の `createEvent`）を通すため、書き込み可否の判定（`resolveGoogleAccountForCalendar`）も同じ経路を通る。「使用」がオフのカレンダー・書き込み不可のカレンダーへは書けない。
 
@@ -274,19 +274,19 @@ DaySpan自身のDBを引けなかったときだけは、取れたぶんとい�
 ### 動作確認
 
 ```bash
-curl -s -X POST -H "Authorization: Bearer $INTERNAL_EVENTS_API_KEY" \
+curl -s -X POST -H "Authorization: Bearer $DAYSPAN_INTERNAL_EVENTS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"title":"歯医者","date":"2026-09-07","startTime":"10:00","endTime":"11:00"}' \
   "http://127.0.0.1:3113/api/internal/events" | jq .
 
 # 終日予定
-curl -s -X POST -H "Authorization: Bearer $INTERNAL_EVENTS_API_KEY" \
+curl -s -X POST -H "Authorization: Bearer $DAYSPAN_INTERNAL_EVENTS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"title":"出張","date":"2026-09-10"}' \
   "http://127.0.0.1:3113/api/internal/events" | jq .
 
 # 仮の予定（issue #688）
-curl -s -X POST -H "Authorization: Bearer $INTERNAL_EVENTS_API_KEY" \
+curl -s -X POST -H "Authorization: Bearer $DAYSPAN_INTERNAL_EVENTS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"title":"多分この時間","date":"2026-09-07","startTime":"14:00","endTime":"15:00","tentative":true}' \
   "http://127.0.0.1:3113/api/internal/events" | jq .
@@ -294,7 +294,7 @@ curl -s -X POST -H "Authorization: Bearer $INTERNAL_EVENTS_API_KEY" \
 
 ## `PATCH /api/internal/events/[id]` / `DELETE /api/internal/events/[id]`
 
-既存の予定1件を動かす・取り消す（起点: guchi-apps/aide-bot#372・issue #805）。認証は作成と同じ `INTERNAL_EVENTS_API_KEY`（書き込み用の鍵の分離を踏襲）。ブラウザ用の `PATCH` / `DELETE /api/events/[eventId]` と同じ処理（書き込み可否の判定・紐づけたタスクの日付の追随・記録／通知設定の掃除）を通す。
+既存の予定1件を動かす・取り消す（起点: guchi-apps/aide-bot#372・issue #805）。認証は作成と同じ `DAYSPAN_INTERNAL_EVENTS_API_KEY`（書き込み用の鍵の分離を踏襲）。ブラウザ用の `PATCH` / `DELETE /api/events/[eventId]` と同じ処理（書き込み可否の判定・紐づけたタスクの日付の追随・記録／通知設定の掃除）を通す。
 
 誤操作の影響を抑えるため、対象は必ず `calendarId` とIDで名指しさせる（`aide_schedule` の各予定の `id` / `calendarId` を使う。事前に確認してから呼ぶ想定）。繰り返しの親（シリーズ全体）は `409`（1回分のIDを指定する）。複数日にまたがる終日予定（出張など）もこの入口では扱えず `409`。日をまたぐ**時刻あり**の予定は `endDate`（issue #813）で終了日を指定すれば動かせる。
 
@@ -333,16 +333,16 @@ curl -s -X POST -H "Authorization: Bearer $INTERNAL_EVENTS_API_KEY" \
 | 繰り返しの親・複数日にまたがる終日予定・タイトル不一致 | `409` |
 
 ```bash
-curl -s -X PATCH -H "Authorization: Bearer $INTERNAL_EVENTS_API_KEY" -H "Content-Type: application/json" \
+curl -s -X PATCH -H "Authorization: Bearer $DAYSPAN_INTERNAL_EVENTS_API_KEY" -H "Content-Type: application/json" \
   -d '{"calendarId":"primary","startTime":"14:00","endTime":"15:00"}' \
   "http://127.0.0.1:3113/api/internal/events/EVENT_ID" | jq .
 
 # 日をまたぐ時刻ありの予定（issue #813）
-curl -s -X PATCH -H "Authorization: Bearer $INTERNAL_EVENTS_API_KEY" -H "Content-Type: application/json" \
+curl -s -X PATCH -H "Authorization: Bearer $DAYSPAN_INTERNAL_EVENTS_API_KEY" -H "Content-Type: application/json" \
   -d '{"calendarId":"primary","date":"2026-09-07","endDate":"2026-09-08","startTime":"23:00","endTime":"06:00"}' \
   "http://127.0.0.1:3113/api/internal/events/EVENT_ID" | jq .
 
-curl -s -X DELETE -H "Authorization: Bearer $INTERNAL_EVENTS_API_KEY" -G \
+curl -s -X DELETE -H "Authorization: Bearer $DAYSPAN_INTERNAL_EVENTS_API_KEY" -G \
   --data-urlencode "calendarId=primary" --data-urlencode "title=歯医者" \
   "http://127.0.0.1:3113/api/internal/events/EVENT_ID" | jq .
 ```
@@ -449,7 +449,7 @@ curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:3113/api/internal/ai-
 ## 動作確認
 
 ```bash
-curl -s -H "Authorization: Bearer $INTERNAL_API_KEY" \
+curl -s -H "Authorization: Bearer $DAYSPAN_INTERNAL_API_KEY" \
   "http://127.0.0.1:3113/api/internal/schedule" | jq .
 
 # 明日から3日ぶん
@@ -464,15 +464,14 @@ curl -s -H "Authorization: Bearer $INTERNAL_API_KEY" \
 curl -s -o /dev/null -w '%{http_code}\n' "http://127.0.0.1:3113/api/internal/schedule"
 ```
 
-ローカル開発では `.env.local` に `INTERNAL_API_KEY` を設定する（本番の値は使わない）。ポートは `pnpm dev` の `PORT`。
+ローカル開発では共有トークンAPIを使うか、`.env.local` に `INTERNAL_API_KEY` をフォールバックとして設定する（本番の値は使わない）。ポートは `pnpm dev` の `PORT`。
 
 ## 環境変数の配線
 
 | 場所 | 設定 |
 | --- | --- |
-| 1Password | `apps/dayspan` の `internal-api-key`（読み取り用） / `internal-events-api-key`（予定書き込み用） / `internal-tasks-api-key`（タスク書き込み用）フィールド（**正**）。`ai-usage` 用の `OPS_API_TOKEN` だけは `apps/ops-dashboard` の `ops-api-token`（ops-dashboard側が正） |
-| GitHub Secret | `INTERNAL_API_KEY` / `INTERNAL_EVENTS_API_KEY` / `INTERNAL_TASKS_API_KEY` / `OPS_API_TOKEN`。`scripts/sync-github-secrets.sh --only INTERNAL_API_KEY,INTERNAL_EVENTS_API_KEY,INTERNAL_TASKS_API_KEY,OPS_API_TOKEN` で1Passwordから同期する |
-| 対応表 | `.github/secrets-manifest.tsv` |
-| 本番 `.env` | `.github/workflows/deploy.yml` が `update_env` で書き込む |
+| issue-deck | `DAYSPAN_INTERNAL_API_KEY`（読み取り用） / `DAYSPAN_INTERNAL_EVENTS_API_KEY`（予定書き込み用） / `DAYSPAN_INTERNAL_TASKS_API_KEY`（タスク書き込み用）の3共有トークンが**正**。それぞれ別の値にする |
+| DaySpanの実行時 | `SHARED_TOKEN_API_SECRET` と `ISSUE_DECK_URL` で共有トークンAPIから取得する。ローカル開発・移行中に取得できない場合だけ同名の `INTERNAL_*_API_KEY` 環境変数へフォールバックする |
+| GitHub Secret・本番 `.env` | 3鍵自体は置かない。共有トークンAPIへの接続情報だけを配る |
 
-キーを更新するときは、1Passwordの値を変えてから `sync-github-secrets.sh` を実行し、再デプロイする。**呼び出し元（AIDE）側の値も同時に更新しないと連携が止まる。**
+キーを更新するときはissue-deckの共有トークンを更新する。DaySpanは最大10分のキャッシュを使うため、反映まで待ってから呼び出し元（AIDE）側も同じ共有トークンを取得できることを確かめる。**3鍵の値を統合せず、読み取り・予定書き込み・タスク書き込みの分離を維持する。**

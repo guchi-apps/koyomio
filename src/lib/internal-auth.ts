@@ -20,7 +20,7 @@ export async function requireInternalApiKey(request: Request): Promise<Response 
 
 /**
  * 書き込み系（`POST /api/internal/events` 等）の認証。読み取り用の `INTERNAL_API_KEY` とは
- * 別の環境変数（`INTERNAL_EVENTS_API_KEY`）で守る（docs/internal-api.md「認証」）。
+ * 別の共有トークン（`DAYSPAN_INTERNAL_EVENTS_API_KEY`）で守る（docs/internal-api.md「認証」）。
  *
  * 読み取り用のキーが漏れても予定を書き込まれないようにするための分離で、比較・未設定時の
  * 扱いは読み取り用とまったく同じ。
