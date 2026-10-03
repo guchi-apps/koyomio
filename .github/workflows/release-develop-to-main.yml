@@ -36,7 +36,7 @@ concurrency:
 
 jobs:
   release:
-    uses: guchi-apps/issue-deck/.github/workflows/reusable-release-develop-to-main.yml@workflows/v43
+    uses: guchi-apps/issue-deck/.github/workflows/reusable-release-develop-to-main.yml@workflows/v44
     # このリポジトリはルートのpackage.jsonにversionを持ち、"version" lifecycleスクリプトも
     # 定義しているため、バージョンの読み書きに関するinputsは既定値でよい
     # （version-file: package.json / version-query: .version / bump-command: 空）。
