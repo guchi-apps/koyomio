@@ -20,7 +20,7 @@ export async function requireInternalApiKey(request: Request): Promise<Response 
 
 /**
  * 書き込み系（`POST /api/internal/events` 等）の認証。読み取り用の `INTERNAL_API_KEY` とは
- * 別の環境変数（`INTERNAL_EVENTS_API_KEY`）で守る（docs/internal-api.md「認証」）。
+ * 別の共有トークン（`DAYSPAN_INTERNAL_EVENTS_API_KEY`）で守る（docs/internal-api.md「認証」）。
  *
  * 読み取り用のキーが漏れても予定を書き込まれないようにするための分離で、比較・未設定時の
  * 扱いは読み取り用とまったく同じ。
@@ -34,10 +34,23 @@ export async function requireInternalEventsApiKey(request: Request): Promise<Res
   );
 }
 
+/** タスクの作成・更新・状態遷移専用の認証。予定の書き込み鍵とも共有しない。 */
+export async function requireInternalTasksApiKey(request: Request): Promise<Response | null> {
+  return requireBearerKey(
+    request,
+    "DAYSPAN_INTERNAL_TASKS_API_KEY",
+    "INTERNAL_TASKS_API_KEY",
+    "internal_tasks_api_not_configured",
+  );
+}
+
 async function requireBearerKey(
   request: Request,
-  sharedTokenName: "DAYSPAN_INTERNAL_API_KEY" | "DAYSPAN_INTERNAL_EVENTS_API_KEY",
-  fallbackEnvName: "INTERNAL_API_KEY" | "INTERNAL_EVENTS_API_KEY",
+  sharedTokenName:
+    | "DAYSPAN_INTERNAL_API_KEY"
+    | "DAYSPAN_INTERNAL_EVENTS_API_KEY"
+    | "DAYSPAN_INTERNAL_TASKS_API_KEY",
+  fallbackEnvName: "INTERNAL_API_KEY" | "INTERNAL_EVENTS_API_KEY" | "INTERNAL_TASKS_API_KEY",
   notConfiguredError: string,
 ): Promise<Response | null> {
   // 正は issue-deck の共有トークン。取得できないときだけ従来の環境変数へ落ちる（issue #860）。

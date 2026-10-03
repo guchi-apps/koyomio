@@ -38,6 +38,7 @@ model User {
   taskEventLinks       TaskEventLink[]
   eventOutcomes        EventOutcome[]
   annualLeaveGrants    AnnualLeaveGrant[]
+  internalTaskOperations InternalTaskOperation[]
 
   pushSubscriptions         PushSubscription[]
   apnsDevices               ApnsDevice[]
@@ -47,6 +48,26 @@ model User {
   notificationSetting       NotificationSetting?
   notificationJobs          NotificationJob[]
   eventNotificationSettings EventNotificationSetting[]
+}
+
+// サーバー間タスク操作の再送を識別する記録。タスク本体はNotionに置いたまま、
+// 同じ要求で作成・完了を二重に実行しないための最小限のメタデータだけを持つ。
+model InternalTaskOperation {
+  id             String   @id @default(cuid())
+  userId         String
+  idempotencyKey String
+  operation      String
+  taskId         String?
+  requestHash    String   @db.VarChar(64)
+  state          String   @default("PROCESSING")
+  result         Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, taskId, operation])
 }
 
 // --- Google Calendar連携 ---

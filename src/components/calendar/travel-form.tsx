@@ -1,7 +1,8 @@
 "use client";
 
 import { useOffline } from "next/offline";
-import { useState } from "react";
+import { CheckCircle2, CircleAlert, LoaderCircle, RefreshCw } from "lucide-react";
+import { useRef, useState } from "react";
 
 import { OFFLINE_WRITE_MESSAGE } from "@/components/offline/offline-notice";
 import { Button } from "@/components/ui/button";
@@ -44,6 +45,12 @@ export type TravelDraft = {
   roundTrip?: boolean;
 };
 
+type GoogleRouteStatus =
+  | { kind: "idle" }
+  | { kind: "analyzing" }
+  | { kind: "success"; message: string }
+  | { kind: "error"; message: string };
+
 /**
  * 移動の入力欄（docs/spec.md §29）。ダイアログの枠と種類の切り替えは ItemDialog が持つ。
  *
@@ -84,10 +91,11 @@ export function TravelForm({
   );
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  // Googleマップから取り込んだ結果の報せ。
-  const [googleNotice, setGoogleNotice] = useState<string | null>(null);
+  // Googleマップから取り込んだ結果の報せ。入力全体の保存エラーとは別に、URL欄の近くで経過を伝える。
+  const [googleRouteStatus, setGoogleRouteStatus] = useState<GoogleRouteStatus>({ kind: "idle" });
   const [googleRouteUrl, setGoogleRouteUrl] = useState("");
-  const [resolvingGoogleRoute, setResolvingGoogleRoute] = useState(false);
+  // 貼り直したあとに先行リクエストが返っても、古い経路で入力欄を上書きしないための世代番号。
+  const googleRouteRequestRef = useRef(0);
 
   const offline = useOffline();
 
@@ -135,14 +143,13 @@ export function TravelForm({
     }
 
     setError(null);
-    setGoogleNotice(
-      `Googleマップの経路を反映しました（${TRAVEL_MODE_LABELS[route.mode]}・所要時間${route.minutes}分）。`,
-    );
   };
 
   const importGoogleMapsRoute = async (value: string) => {
-    setResolvingGoogleRoute(true);
-    setGoogleNotice(null);
+    const requestId = googleRouteRequestRef.current + 1;
+    googleRouteRequestRef.current = requestId;
+    const isCurrentRequest = () => googleRouteRequestRef.current === requestId;
+    setGoogleRouteStatus({ kind: "analyzing" });
     setError(null);
     try {
       const response = await fetch("/api/travels/google-maps-route", {
@@ -151,16 +158,29 @@ export function TravelForm({
         body: JSON.stringify({ url: value }),
       });
       if (!response.ok) {
-        setError(await readErrorMessage(response, "Googleマップの経路URLを読み取れませんでした。"));
+        const message = await readErrorMessage(response, "Googleマップの経路URLを読み取れませんでした。");
+        if (isCurrentRequest()) setGoogleRouteStatus({ kind: "error", message });
         return;
       }
       const body = (await response.json()) as { route: GoogleMapsRoute };
+      if (!isCurrentRequest()) return;
       applyGoogleMapsRoute(body.route);
+      setGoogleRouteStatus({
+        kind: "success",
+        message: `Googleマップの経路を反映しました（${TRAVEL_MODE_LABELS[body.route.mode]}・所要時間${body.route.minutes}分）。`,
+      });
     } catch {
-      setError("Googleマップの経路URLを読み取れませんでした。");
-    } finally {
-      setResolvingGoogleRoute(false);
+      if (isCurrentRequest()) {
+        setGoogleRouteStatus({ kind: "error", message: "Googleマップの経路URLを読み取れませんでした。" });
+      }
     }
+  };
+
+  const changeGoogleRouteUrl = (value: string) => {
+    // 手入力でURLを直した時点で、前の解析結果は対象外にする。貼り付け時は直後に新しい解析を始める。
+    googleRouteRequestRef.current += 1;
+    setGoogleRouteUrl(value);
+    setGoogleRouteStatus({ kind: "idle" });
   };
 
   const save = async () => {
@@ -315,19 +335,49 @@ export function TravelForm({
             rows={2}
             placeholder="共有した経路URLを貼り付ける"
             value={googleRouteUrl}
-            disabled={resolvingGoogleRoute || offline}
-            onChange={(e) => setGoogleRouteUrl(e.target.value)}
+            disabled={offline}
+            onChange={(e) => changeGoogleRouteUrl(e.target.value)}
             onPaste={(event) => {
               const value = event.clipboardData.getData("text").trim();
               if (!value) return;
               event.preventDefault();
-              setGoogleRouteUrl(value);
+              changeGoogleRouteUrl(value);
               void importGoogleMapsRoute(value);
             }}
-            onClear={() => setGoogleRouteUrl("")}
+            onClear={() => changeGoogleRouteUrl("")}
           />
-          {resolvingGoogleRoute && <p className="text-xs text-muted-foreground">経路を解析しています…</p>}
-          {googleNotice && <p className="text-xs text-muted-foreground">{googleNotice}</p>}
+          {googleRouteStatus.kind === "idle" && (
+            <p className="text-xs text-muted-foreground">Googleマップの経路URLを貼り付けると、AIが解析して入力欄へ反映します。</p>
+          )}
+          {googleRouteStatus.kind === "analyzing" && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground" role="status" aria-live="polite">
+              <LoaderCircle className="size-4 animate-spin" />
+              AIが経路を解析しています…
+            </p>
+          )}
+          {googleRouteStatus.kind === "success" && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground" role="status" aria-live="polite">
+              <CheckCircle2 className="size-4 text-travel" />
+              {googleRouteStatus.message}
+            </p>
+          )}
+          {googleRouteStatus.kind === "error" && (
+            <div className="flex items-center gap-2 text-xs text-destructive" role="alert">
+              <CircleAlert className="size-4 shrink-0" />
+              <span>{googleRouteStatus.message}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className="ml-auto"
+                disabled={offline || !googleRouteUrl.trim()}
+                onClick={() => void importGoogleMapsRoute(googleRouteUrl)}
+              >
+                <RefreshCw />
+                再試行
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* 往復は元になった予定があるときだけ。単独の移動では帰りの起点が決まらない。 */}

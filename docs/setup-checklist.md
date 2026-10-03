@@ -4,7 +4,7 @@ DaySpan を動かすために必要な、リポジトリ外の設定作業をま
 
 共通の手順は [m-guchi/docs](https://github.com/m-guchi/docs) の `guides/new-app-checklist.md` を一次情報源とし、ここには DaySpan 固有の値と、通常のチェックリストに無い項目だけを書く。
 
-## 1. 1Password（`apps` ボールト / `dayspan` アイテム）
+## 1. シークレットの管理先
 
 | フィールド | 値 |
 |---|---|
@@ -14,8 +14,7 @@ DaySpan を動かすために必要な、リポジトリ外の設定作業をま
 | `token-encryption-key` | `openssl rand -base64 32` で生成した32byte鍵 |
 | `google-calendar-client-id` | 本番用のDaySpan専用OAuthクライアントID |
 | `google-calendar-client-secret` | 同シークレット |
-| `internal-api-key` | サーバー間参照用APIの共有シークレット（`openssl rand -hex 32` で生成。呼び出し元のAIDE側にも同じ値を設定する。docs/internal-api.md） |
-| `internal-events-api-key` | `POST /api/internal/events`（予定の作成）専用の共有シークレット。`internal-api-key` とは別の値にする（`openssl rand -hex 32` で生成。呼び出し元のAIDE側にも同じ値を設定する。docs/internal-api.md） |
+| （issue-deckの共有トークン） | `DAYSPAN_INTERNAL_API_KEY`（読み取り用）・`DAYSPAN_INTERNAL_EVENTS_API_KEY`（予定書き込み用）・`DAYSPAN_INTERNAL_TASKS_API_KEY`（タスク書き込み用）はissue-deckで管理する。3値は互いに別にし、呼び出し元のAIDEも同名の共有トークンから読む（docs/internal-api.md） |
 | （`ops-dashboard` アイテムの `ops-api-token`） | ops-dashboardがAIの使用量（`GET /api/internal/ai-usage`）を読むときのBearer認証。**値の正は `op://apps/ops-dashboard/ops-api-token` で、`dayspan` アイテムへは複製しない**（ops-dashboard・issue-deckと同じ値を持つ。docs/internal-api.md） |
 | （`issue-deck` アイテムの `typesafe-api-key`） | 買い物リストのカテゴリの自動判定（TypeSafeのJev・issue #725）。**値の正は `op://apps/issue-deck/typesafe-api-key` で、`dayspan` アイテムへは複製しない**。未設定でも判定以外は動く |
 | `ci-webhook-url` | Signaly の DaySpan 用チャンネルWebhook URL |
@@ -41,6 +40,8 @@ DaySpan側の連携コード・`.github/secrets-manifest.tsv` の参照を削除
 ```bash
 gh workflow run sync-secrets.yml -f only=VAPID_PUBLIC_KEY,VAPID_PRIVATE_KEY,VAPID_SUBJECT,APNS_KEY_ID,APNS_TEAM_ID,APNS_PRIVATE_KEY
 ```
+
+内部API用の3鍵を新設・変更した場合は、issue-deckの共有トークン画面で値を登録・更新し、利用元に`dayspan`と呼び出し元が記録されたことを確かめる。GitHub Secretへの同期やVPSの`.env`への配布は不要である。
 
 ASC_*（TestFlight自動配信）をマニフェストへ足した直後は、行がまだ `develop` に無いため、**足したブランチを指定して**同期する（ワークフローは起動したrefのマニフェストを読む。`--ref` が無いと対象が0件になる）。マージ後は上と同じ形でよい。
 

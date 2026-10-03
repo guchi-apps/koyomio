@@ -89,6 +89,34 @@ export async function getTaskLinkByTaskId(
   });
 }
 
+/**
+ * 期限・予定日の直接更新が紐づけ先と異なるとき、該当する行き先だけを外す。
+ * ブラウザーAPIと内部APIが同じ規則を通るよう、ルートからここへ集約する。
+ */
+export async function unlinkOverriddenTaskDateLinks(
+  userId: string,
+  taskId: string,
+  input: Pick<TaskWriteInput, "due" | "planned">,
+): Promise<void> {
+  for (const target of ["DUE", "PLANNED"] as const) {
+    const date = target === "DUE" ? input.due : input.planned;
+    if (date === undefined) continue;
+
+    const link = await getTaskLinkByTaskId(userId, taskId, target);
+    if (!link) continue;
+
+    const resolved = link.resolvedAt.toISOString();
+    const same = isSameTaskDate(
+      { date, allDay: date ? !date.includes("T") : false },
+      {
+        date: link.resolvedAllDay ? resolved.slice(0, 10) : resolved,
+        allDay: link.resolvedAllDay,
+      },
+    );
+    if (!same) await unlinkTask(userId, link.id);
+  }
+}
+
 /** DBに入っている解決済みの日時を、タスクの日付と同じ形（日付のみ／ISO 8601）へ戻す。 */
 function resolvedDate(link: TaskEventLink): string {
   const iso = link.resolvedAt.toISOString();

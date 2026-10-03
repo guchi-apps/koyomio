@@ -60,6 +60,25 @@ export type InternalTask = {
   url: string | null;
 };
 
+/** タスク専用内部APIの意味上の状態。対応しないは完了と混同しない。 */
+export type InternalTaskStatus = "open" | "completed" | "skipped";
+
+export type InternalTaskDetail = {
+  id: string;
+  title: string;
+  status: InternalTaskStatus;
+  due: string | null;
+  planned: string | null;
+  priority: string | null;
+  progress: string | null;
+  tags: string[];
+  memo: string | null;
+  recurrence: string | null;
+  /** 更新時にそのまま返す楽観ロック用のNotion最終更新時刻。 */
+  version: string;
+  url: string | null;
+};
+
 /** 期限切れの未完了タスク。要求した範囲より前に期限があるもの。 */
 export type InternalOverdueTask = {
   id: string;

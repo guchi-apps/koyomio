@@ -32,9 +32,10 @@ type NotionPropertyValue = {
   date?: { start?: string | null; end?: string | null } | null;
 };
 
-type NotionPage = {
+export type NotionTaskPage = {
   id: string;
   url?: string;
+  last_edited_time?: string;
   properties?: Record<string, NotionPropertyValue>;
 };
 
@@ -60,7 +61,7 @@ function readChoice(property: NotionPropertyValue | undefined): string | null {
   return null;
 }
 
-export function normalizeTask(page: NotionPage, propertyMap: PropertyMap): TaskItem {
+export function normalizeTask(page: NotionTaskPage, propertyMap: PropertyMap): TaskItem {
   const properties = page.properties ?? {};
   const get = (field: keyof PropertyMap) => {
     const name = propertyMap[field];
@@ -102,32 +103,41 @@ export function normalizeTask(page: NotionPage, propertyMap: PropertyMap): TaskI
   };
 }
 
-async function queryTasks(
+export async function queryTaskPages(
   notion: Client,
   dataSourceId: string,
   filter: NotionQueryFilter | undefined,
-): Promise<NotionPage[]> {
-  const pages: NotionPage[] = [];
+): Promise<NotionTaskPage[]> {
+  const pages: NotionTaskPage[] = [];
   let cursor: string | undefined;
 
   do {
-    const response = await notion.dataSources.query({
-      data_source_id: dataSourceId,
-      page_size: 100,
-      ...(filter ? { filter } : {}),
-      ...(cursor ? { start_cursor: cursor } : {}),
-    });
-
-    for (const result of response.results) {
-      if (result.object !== "page") continue;
-      if (!("properties" in result)) continue;
-      pages.push(result as NotionPage);
-    }
-
-    cursor = response.has_more && response.next_cursor ? response.next_cursor : undefined;
+    const response = await queryTaskPage(notion, dataSourceId, filter, cursor);
+    pages.push(...response.pages);
+    cursor = response.nextCursor ?? undefined;
   } while (cursor);
 
   return pages;
+}
+
+/** 一覧API向けの1ページだけのNotion問い合わせ。全件取得が必要な画面用の関数と分ける。 */
+export async function queryTaskPage(
+  notion: Client,
+  dataSourceId: string,
+  filter: NotionQueryFilter | undefined,
+  cursor?: string,
+  pageSize = 100,
+): Promise<{ pages: NotionTaskPage[]; nextCursor: string | null }> {
+  const response = await notion.dataSources.query({
+    data_source_id: dataSourceId,
+    page_size: pageSize,
+    ...(filter ? { filter } : {}),
+    ...(cursor ? { start_cursor: cursor } : {}),
+  });
+  const pages = response.results
+    .filter((result) => result.object === "page" && "properties" in result)
+    .map((result) => result as NotionTaskPage);
+  return { pages, nextCursor: response.has_more ? (response.next_cursor ?? null) : null };
 }
 
 /** 対応付けの取り直しの間隔。取得のたびに `dataSources.retrieve` が1往復増えるのを避ける（docs/spec.md §20）。 */
@@ -191,7 +201,7 @@ export async function listTasksInRange(
 
   if (!connection.taskDataSourceId || !dueProperty) return [];
 
-  const pages = await queryTasks(
+  const pages = await queryTaskPages(
     notion,
     connection.taskDataSourceId,
     taskRangeFilter(dueProperty, propertyMap.planned, range, options?.overdueRange),
@@ -209,7 +219,7 @@ export async function listAllTasks(
   const propertyMap = (connection.propertyMap as PropertyMap | null) ?? {};
   if (!connection.taskDataSourceId) return [];
 
-  const pages = await queryTasks(notion, connection.taskDataSourceId, undefined);
+  const pages = await queryTaskPages(notion, connection.taskDataSourceId, undefined);
   return pages.map((page) => normalizeTask(page, propertyMap));
 }
 
@@ -321,7 +331,7 @@ async function assertTaskPage(
   notion: Client,
   connection: NotionConnection,
   taskId: string,
-): Promise<NotionPage> {
+): Promise<NotionTaskPage> {
   if (!connection.taskDataSourceId) throw new TaskNotEditableError();
 
   const page = await notion.pages.retrieve({ page_id: taskId });
@@ -334,7 +344,16 @@ async function assertTaskPage(
     a.replaceAll("-", "").toLowerCase() === b.replaceAll("-", "").toLowerCase();
 
   if (!sameId(dataSourceId, connection.taskDataSourceId)) throw new TaskNotEditableError();
-  return page as NotionPage;
+  return page as NotionTaskPage;
+}
+
+/** 内部APIなどが版照合のために、所属確認済みのページを取得する。 */
+export async function getTaskPage(
+  notion: Client,
+  connection: NotionConnection,
+  taskId: string,
+): Promise<NotionTaskPage> {
+  return assertTaskPage(notion, connection, taskId);
 }
 
 /** 完了状態のプロパティがcheckboxかstatusかを、既存ページの値から判別する。 */
@@ -423,6 +442,10 @@ export async function completeTask(
 
   const page = await assertTaskPage(notion, connection, taskId);
   const current = "properties" in page ? normalizeTask(page, propertyMap) : null;
+
+  // 同じ完了要求がそのまま再送された場合、繰り返しの次回をもう1件作らない。
+  // 冪等キーを持たない既存の画面経路でも最低限同じ回の重複を防ぐ。
+  if (done && current?.done && !current.skipped) return { nextTaskId: null };
 
   // 「対応しない」から完了へ変える操作では、対応状況を外す（完了と対応しないは両立しない）。
   // 他の値（利用者が独自に足した選択肢）は触らない。
