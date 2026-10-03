@@ -29,7 +29,7 @@ export type ChangelogEntry = {
  */
 export const APP_CHANGELOG: ChangelogEntry[] = [
   {
-    version: "4.4.0",
+    version: "4.4.1",
     date: "2026-10-04",
     changes: [
       "移動の入力で、Googleマップの経路URLを貼り付けたときの解析状況が分かりやすくなりました。解析中・反映できた・読み取れなかった、の各状態がURL欄の近くに表示され、失敗したときは「再試行」ボタンでもう一度試せます。URLを貼り直した場合は、古い解析結果で入力欄が上書きされることもありません。",
